@@ -1,10 +1,10 @@
 # pinaclj-editor
 
-FIXME: Write a one-line description of your library/project.
+A WYSIWYG editor for web pages.
 
 ## Overview
 
-FIXME: Write a paragraph about the library/project and highlight its goals.
+Only just started development, check back soon.
 
 ## Setup
 
@@ -51,6 +51,6 @@ Build a single release artifact with the following script and then open `index_r
 
 ## License
 
-Copyright © 2016 FIXME
+Copyright © 2016 Daniel Irvine.
 
-Distributed under the Eclipse Public License either version 1.0 or (at your option) any later version.
+Licensed under the GPL.
