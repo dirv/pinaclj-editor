@@ -1,0 +1,42 @@
+* Finish off Enter
+* close-existing-tag should make use of insertTree now
+* Modifier matching keys should work for all modifier keys
+* Then get all the keys set up
+* Backspace
+* Selection (mouse and keyboard)
+
+Keys that should be supported
+ Bold, italic, underline,
+ Strikethrough  Option + Shift + 5
+ Superscript  ⌘ + .
+ Subscript  ⌘ + ,
+ choosing different css styles
+ Text selection
+* Technical issues that need to be solved: clicking on an element should represent a particular node (may need breaking apart a text node? or maintaining the current text in the current text node?).
+
+
+* Grouping content: hr, pre, blockquote, ol, ul, li
+* q, pre, code, samp, sup, sub, small, var, abbr
+* q for quote: The q element must not be used in place of quotation marks that do not represent quotes; for example, it is inappropriate to use the q element for marking up sarcastic statements.
+* figures?
+
+=> h1–h6 elements must not be used to markup subheadings, subtitles, alternative titles and taglines unless intended to be the heading for a new section or subsection. 
+
+Tests:
+ * that there is an initial text placed
+ * that pressing a character key enters it
+ * that entering a command wraps the html.
+ * ability to send a save request 
+ * preventDefault, but only if we handled the event
+ * don't handle keys which aren't known(e.g. Ctrl+R)
+ * backspace
+ * special characters: &amp; and < (maybe this is handled?)
+ * aside, header, footer
+* Modifier mappings add a tree of tags (e.g. ul > li)
+* Modifier matching keys should work for all modifier keys
+* Enter should do something different for li keys
+* Tags-between does not include text nodes
+* Closing a list removes a list item and opens a p
+* Closing an empty list removes that entire list
+* Closing an empty flow element removes it, except for p elements
+
