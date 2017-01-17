@@ -1,9 +1,11 @@
-* Finish off Enter
-* close-existing-tag should make use of insertTree now
+* Backspacing into an ol does not work!
+* Get rid of all recursive calls and use node-path
+* Keeping bold text after an <ol> is ended
+  causes bold to disappear in the next <p>
 * Modifier matching keys should work for all modifier keys
 * Then get all the keys set up
-* Backspace
 * Selection (mouse and keyboard)
+* Display a caret
 
 Keys that should be supported
  Bold, italic, underline,
@@ -39,4 +41,7 @@ Tests:
 * Closing a list removes a list item and opens a p
 * Closing an empty list removes that entire list
 * Closing an empty flow element removes it, except for p elements
+* Closing a list with a strong but no text
+* Deleting empty list elements
+
 

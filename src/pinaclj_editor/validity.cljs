@@ -4,6 +4,8 @@
 (def phrasing-content
   [dom/TagName.A
    dom/TagName.ABBR
+   dom/TagName.CITE
+   dom/TagName.CODE
    dom/TagName.EM
    dom/TagName.IMG
    dom/TagName.Q
@@ -21,8 +23,6 @@
     phrasing-content
     [dom/TagName.ARTICLE
      dom/TagName.BLOCKQUOTE
-     dom/TagName.CITE
-     dom/TagName.CODE
      dom/TagName.DATA
      dom/TagName.DATALIST
      dom/TagName.DIV
@@ -47,6 +47,14 @@
    dom/TagName.UL [dom/TagName.UL]
    dom/TagName.DIV flow-content})
 
+(def structural-elements
+  [dom/TagName.P
+   dom/TagName.OL
+   dom/TagName.UL])
+
+(defn- structural? [element]
+  (some #{(.-tagName element)} structural-elements))
+
 (defn- is-valid-child? [parent child-tag]
   (let [parent-tag (.-tagName parent)]
     (or
@@ -63,7 +71,8 @@
     :else
     (find-insert-point top (dom/getParentElement current) tag-name)))
 
-(defn find-flow-element [current]
-  (if (some #{(.-tagName current)} flow-content)
+; todo get rid of this and use node-path
+(defn find-structural-element [current]
+  (if (structural? current) 
     current
-    (find-flow-element (dom/getParentElement current))))
+    (find-structural-element (dom/getParentElement current))))
