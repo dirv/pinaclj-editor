@@ -1,6 +1,7 @@
 (ns pinaclj-editor.core
   (:require [clojure.browser.repl :as repl]
             [goog.dom :as dom]
+            [goog.dom.browserrange :as sel]
             [goog.events :as events]
             [pinaclj-editor.validity :as validity])
   (:import [goog.events KeyCodes]))
@@ -42,11 +43,16 @@
     (conj (tags-between (dom/getParentElement current) elem) (.-tagName current))))
 
 (def modifier-mappings
-  {\b [dom/TagName.STRONG]
-   \i [dom/TagName.EM]
-   \c [dom/TagName.CITE]
-   \h [dom/TagName.H1]  ; TODO - this should be shift+meta+1
-   \o [dom/TagName.OL dom/TagName.LI]
+  {[\b :meta] [dom/TagName.STRONG]
+   [\i :meta] [dom/TagName.EM]
+   [\c :meta] [dom/TagName.CITE]
+   [33 :shift :meta] [dom/TagName.H1]
+   [\2 :shift :meta] [dom/TagName.H2]
+   [\3 :shift :meta] [dom/TagName.H3]
+   [\4 :shift :meta] [dom/TagName.H4]
+   [\5 :shift :meta] [dom/TagName.H5]
+   [\6 :shift :meta] [dom/TagName.H6]
+   [\o :meta] [dom/TagName.OL dom/TagName.LI]
    })
 
 (defn- open-new-tag [top current [tag-name :as tag-names]]
@@ -122,37 +128,48 @@
       p)
     (append-character-to-node current c)))
 
-(defn- handle [top current c metaKey]
-  (println c)
+(defn- set-selection [current]
+  (.select (sel/createRangeFromNodes current 0 current (.-length current)))
+  current)
+
+(defn- handle [top current c modifiers]
+  (println (cons (char c) modifiers))
   (cond
     (= c (.-BACKSPACE KeyCodes))
     (insert-backspace top current)
     (= c (.-ENTER KeyCodes))
     (handle-enter current)
-    (and (contains? modifier-mappings (char c)) metaKey)
-    (let [[tag-name :as tag-names] (get modifier-mappings (char c))]
+    (= c (.-LEFT KeyCodes))
+    (set-selection current)
+    (and (contains? modifier-mappings (cons (char c) modifiers)))
+    (let [[tag-name :as tag-names] (get modifier-mappings (cons (char c) modifiers))]
       (if-let [existing (find-tag top current tag-name)]
         (close-existing-tag top current existing)
         (open-new-tag top current tag-names)))
-    (and (not metaKey))
+    (empty? modifiers)
     (insert-character top current (char c))
     :else
     nil))
 
 
+(defn- modifier-map [e]
+  {:alt (.-altKey e)
+   :ctrl (.-ctrlKey e)
+   :shift (.-shiftKey e)
+   :meta (.-metaKey e)})
+
+(defn- to-modifiers [e]
+  (mapv first (filter second (modifier-map e))))
+
 (defn- handle-keypress-event [top current e]
-  (when-let [new-current (handle top @current (.-charCode e) (.-metaKey e))]
+  (when-let [new-current
+             (handle top @current (.-charCode e) (to-modifiers e))]
     (reset! current new-current)
     (.preventDefault e)))
 
-(defn- edit [top current]
-  (let [current (atom current)]
+(defn- edit [top]
+  (let [current (atom top)]
     (events/listen (dom/getDocument) "keypress"
                    (partial handle-keypress-event top current))))
 
-(let [editor (dom/getElement "editor")
-      p (dom/createElement dom/TagName.P)
-      node (dom/createTextNode "")]
-  (dom/appendChild editor p)
-  (dom/appendChild p node)
-  (edit editor node))
+(edit (dom/getElement "editor"))

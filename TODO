@@ -1,10 +1,15 @@
+* Selection with keyboard
+   => Left key should select a word
+   => dom.selection.getStart, setStart, setEnd
+   => Add support for shift and alt key
+      => Shift+Alt+Left arrow is jump back a word
 * Backspacing into an ol does not work!
 * Get rid of all recursive calls and use node-path
 * Keeping bold text after an <ol> is ended
   causes bold to disappear in the next <p>
 * Modifier matching keys should work for all modifier keys
 * Then get all the keys set up
-* Selection (mouse and keyboard)
+* Selection with mouse
 * Display a caret
 
 Keys that should be supported
@@ -25,6 +30,7 @@ Keys that should be supported
 => h1–h6 elements must not be used to markup subheadings, subtitles, alternative titles and taglines unless intended to be the heading for a new section or subsection. 
 
 Tests:
+* that a p is opened initially
  * that there is an initial text placed
  * that pressing a character key enters it
  * that entering a command wraps the html.
@@ -43,5 +49,12 @@ Tests:
 * Closing an empty flow element removes it, except for p elements
 * Closing a list with a strong but no text
 * Deleting empty list elements
+* Backspacing on empty should delete nothing
+* Backspacing should delete a character
+* Backspacing should delete a parent
+* Backspacing should delete entire empty parent tree
+* Backspacing into a list (ol)
+* Selecting a character to the left
+
 
 
