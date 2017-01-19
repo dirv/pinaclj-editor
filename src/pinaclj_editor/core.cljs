@@ -55,6 +55,14 @@
    [\o :meta] [dom/TagName.OL dom/TagName.LI]
    })
 
+(def selection-mappings
+  {[(.-LEFT KeyCodes) :shift] :character-left
+   [(.-RIGHT KeyCodes) :shift] :character-right
+   [(.-LEFT KeyCodes) :alt :shift] :word-left
+   [(.-RIGHT KeyCodes) :alt :shift] :word-right
+   [(.-LEFT KeyCodes) :shift :meta] :line-left
+   [(.-RIGHT KeyCodes) :shift :meta] :line-right})
+
 (defn- open-new-tag [top current [tag-name :as tag-names]]
   (let [insert-point (validity/find-insert-point top current tag-name)]
     (insert-tree insert-point tag-names)))
@@ -128,25 +136,51 @@
       p)
     (append-character-to-node current c)))
 
-(defn- set-selection [current]
-  (.select (sel/createRangeFromNodes current 0 current (.-length current)))
+(defn- find-next-whitespace [start increment text]
+  (cond
+    (or (> 0 start)  (< (count text) start))
+    start
+    (= \  (nth text start))
+    start
+    :else
+    (find-next-whitespace (+ start increment) increment text)))
+
+(defn- extend-range [current rng selection-type]
+  (case selection-type
+    :word-left
+    (.setStart rng (.-firstChild current) (find-next-whitespace (.-startOffset rng) -1 (dom/getTextContent current)))))
+
+(defn- create-range [current]
+  (let [r (.createRange js/document)
+        selection (.getSelection js/window)]
+    (.setStart r (.-firstChild current) (dec (count (dom/getTextContent current))))
+    (.collapse r true)
+    (.addRange selection r)))
+
+(defn- set-selection [current selection-type]
+  (case selection-type
+    :word-left
+    (do (create-range current)
+        (extend-range current (.getRangeAt (.getSelection js/window) 0) :word-left))
+    :else
+    (.select (sel/createRangeFromNodes current 0 current (.-length current))))
   current)
 
-(defn- handle [top current c modifiers]
-  (println (cons (char c) modifiers))
-  (cond
+(defn- handle [top current [c modifiers :as key-desc]]
+  (println key-desc)
+    (cond
     (= c (.-BACKSPACE KeyCodes))
     (insert-backspace top current)
     (= c (.-ENTER KeyCodes))
     (handle-enter current)
-    (= c (.-LEFT KeyCodes))
-    (set-selection current)
-    (and (contains? modifier-mappings (cons (char c) modifiers)))
-    (let [[tag-name :as tag-names] (get modifier-mappings (cons (char c) modifiers))]
+    (and (contains? selection-mappings key-desc))
+    (set-selection current (get selection-mappings key-desc))
+    (and (contains? modifier-mappings key-desc))
+    (let [[tag-name :as tag-names] (get modifier-mappings key-desc)]
       (if-let [existing (find-tag top current tag-name)]
         (close-existing-tag top current existing)
         (open-new-tag top current tag-names)))
-    (empty? modifiers)
+    (not (some #{:meta :alt} modifiers))
     (insert-character top current (char c))
     :else
     nil))
@@ -163,7 +197,7 @@
 
 (defn- handle-keypress-event [top current e]
   (when-let [new-current
-             (handle top @current (.-charCode e) (to-modifiers e))]
+             (handle top @current (cons (.-charCode e) (to-modifiers e)))]
     (reset! current new-current)
     (.preventDefault e)))
 
