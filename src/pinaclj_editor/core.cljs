@@ -1,8 +1,9 @@
 (ns pinaclj-editor.core
   (:require [clojure.browser.repl :as repl]
             [goog.dom :as dom]
-            [goog.dom.browserrange :as sel]
             [goog.events :as events]
+            [pinaclj-editor.selection :as selection]
+            [pinaclj-editor.text-node-navigator :as text]
             [pinaclj-editor.validity :as validity])
   (:import [goog.events KeyCodes]))
 
@@ -28,14 +29,14 @@
     (dom/insertSiblingAfter node current)
     node))
 
-(defn- find-tag [top current tag-name]
+(defn- find-tag [root current tag-name]
   (cond
-    (= top current)
+    (= root current)
     nil
     (= (.-tagName current) tag-name)
     current
     :else
-    (find-tag top (dom/getParentElement current) tag-name)))
+    (find-tag root (dom/getParentElement current) tag-name)))
 
 (defn- tags-between [current elem]
   (if (= (.-tagName current) (.-tagName elem))
@@ -43,7 +44,7 @@
     (conj (tags-between (dom/getParentElement current) elem) (.-tagName current))))
 
 (def modifier-mappings
-  {[\b :meta] [dom/TagName.STRONG]
+  {[(.-B KeyCodes) :meta] [dom/TagName.STRONG]
    [\i :meta] [dom/TagName.EM]
    [\c :meta] [dom/TagName.CITE]
    [33 :shift :meta] [dom/TagName.H1]
@@ -63,18 +64,18 @@
    [(.-LEFT KeyCodes) :shift :meta] :line-left
    [(.-RIGHT KeyCodes) :shift :meta] :line-right})
 
-(defn- open-new-tag [top current [tag-name :as tag-names]]
-  (let [insert-point (validity/find-insert-point top current tag-name)]
+(defn- open-new-tag [root current [tag-name :as tag-names]]
+  (let [insert-point (validity/find-insert-point root current tag-name)]
     (insert-tree insert-point tag-names)))
 
-(defn- close-existing-tag [top current existing]
+(defn- close-existing-tag [root current existing]
   (let [re-tags (tags-between current existing)]
     (if (empty? re-tags)
       (insert-text-node-after existing)    ; todo - is tihs right?
-      (insert-tree (validity/find-insert-point top (dom/getParentElement existing) (first re-tags)) re-tags))))
+      (insert-tree (validity/find-insert-point root (dom/getParentElement existing) (first re-tags)) re-tags))))
 
-(defn- empty-list-item? [current]
-  (= 0 (count (dom/getTextContent current))))
+(defn- node-empty? [node]
+  (= 0 (count (dom/getTextContent node))))
 
 (defn- close-list [list-element current]
   (dom/removeNode current)
@@ -89,7 +90,7 @@
     (cond
       (= dom/TagName.OL (.-tagName parent))
       (let [li-element (find-tag parent current dom/TagName.LI)]
-        (if (empty-list-item? current)
+        (if (node-empty? current)
           (close-list parent li-element)
           (insert-tree parent tags-between)))
       :else
@@ -97,24 +98,22 @@
                   (cons dom/TagName.P tags-between)) ; todo - this cons is a bit nasty
       )))
 
-(defn- node-path [top node]
-  (if (= top node)
+; todo; is this better done with node-seq in text node navigator?
+(defn- node-path [root node]
+  (if (= root node)
     []
-    (cons node (node-path top (dom/getParentElement node)))))
+    (cons node (node-path root (dom/getParentElement node)))))
 
-(defn- is-empty [node]
-  (= 0 (count (dom/getTextContent node))))
-
-(defn- all-empty [top current]
-  (take-while is-empty (node-path top current)))
+(defn- all-empty [root current]
+  (take-while node-empty? (node-path root current)))
 
 (defn- one-fewer-characters [current]
   (let [content (dom/getTextContent current)]
     (subs content 0 (max 0 (dec (count content))))))
 
-(defn- insert-backspace [top current]
+(defn- insert-backspace [root current]
   (dom/setTextContent current (one-fewer-characters current))
-  (when-let [empty-tree (seq (all-empty top current))]
+  (when-let [empty-tree (seq (all-empty root current))]
     (let [to-remove (last empty-tree)
           parent (dom/getParentElement to-remove)]
       (dom/removeNode to-remove)
@@ -127,8 +126,8 @@
   current)
 
 ; todo - extract out the p node creation with a text node
-(defn- insert-character [top current c]
-  (if (= top current)
+(defn- insert-character [root current c]
+  (if (= root current)
     (let [p (dom/createElement dom/TagName.P)
           text (dom/createTextNode c)]
       (dom/appendChild p text)
@@ -136,55 +135,72 @@
       p)
     (append-character-to-node current c)))
 
-(defn- find-next-whitespace [start increment text]
-  (cond
-    (or (> 0 start)  (< (count text) start))
-    start
-    (= \  (nth text start))
-    start
-    :else
-    (find-next-whitespace (+ start increment) increment text)))
+(defn- get-range [n]
+  (.getRangeAt (.getSelection js/window) n))
 
-(defn- extend-range [current rng selection-type]
+(defn- new-boundary [root rng selection-type]
   (case selection-type
-    :word-left
-    (.setStart rng (.-firstChild current) (find-next-whitespace (.-startOffset rng) -1 (dom/getTextContent current)))))
+      :word-left
+      (text/word-left root (.-startContainer rng) (.-startOffset rng))
+      :character-left
+      (text/character-left root (.-startContainer rng) (.-startOffset rng))
+      :character-right
+      (text/character-right root (.-endContainer rng) (.-endOffset rng))
+      :line-left
+      (println "not implemented yet")
+      :line-right
+      (println "not implemented yet")
+      :else
+      (println "not implemented yet")))
+
+(defn- extend-range [root current selection-type]
+  (let [rng (get-range 0)]
+    (when-let [new-boundary (new-boundary root rng selection-type)]
+    (apply #(.setStart rng %1 %2) new-boundary)))
+  current) ; todo - possibly not return current?
 
 (defn- create-range [current]
+  (println "Creating range")
   (let [r (.createRange js/document)
         selection (.getSelection js/window)]
-    (.setStart r (.-firstChild current) (dec (count (dom/getTextContent current))))
+    (.setStart r (.-firstChild current) 0)
     (.collapse r true)
     (.addRange selection r)))
 
-(defn- set-selection [current selection-type]
-  (case selection-type
-    :word-left
-    (do (create-range current)
-        (extend-range current (.getRangeAt (.getSelection js/window) 0) :word-left))
-    :else
-    (.select (sel/createRangeFromNodes current 0 current (.-length current))))
-  current)
+(defn- create-range-if-necessary [current]
+  (when (= 0 (.-rangeCount (.getSelection js/window)))
+    (create-range current)))
 
-(defn- handle [top current [c modifiers :as key-desc]]
-  (println key-desc)
-    (cond
+; todo - this should take into account text nodes, but it doesn't
+; there is still the outstanding question of if 'current' should be text nodes or
+; the parent.
+(defn- move-caret [current]
+  (println "Moving caret")
+  (create-range-if-necessary current)
+  (let [r (get-range 0)]
+    (println "Moving to " (count (dom/getTextContent current)))
+    (.setStart r (.-firstChild current) (count (dom/getTextContent current)))))
+
+(defn- ->char [[c & modifiers]]
+  (let [ch (char c)]
+    (if (some #{:shift} modifiers)
+      ch
+      (.toLowerCase ch))))
+
+(defn- handle [root current [c & modifiers :as key-desc]]
+  (println "Handling key combo" key-desc)
+  (cond
     (= c (.-BACKSPACE KeyCodes))
-    (insert-backspace top current)
+    (insert-backspace root current)
     (= c (.-ENTER KeyCodes))
     (handle-enter current)
     (and (contains? selection-mappings key-desc))
-    (set-selection current (get selection-mappings key-desc))
+    (extend-range root current (get selection-mappings key-desc))
     (and (contains? modifier-mappings key-desc))
     (let [[tag-name :as tag-names] (get modifier-mappings key-desc)]
-      (if-let [existing (find-tag top current tag-name)]
-        (close-existing-tag top current existing)
-        (open-new-tag top current tag-names)))
-    (not (some #{:meta :alt} modifiers))
-    (insert-character top current (char c))
-    :else
-    nil))
-
+      (if-let [existing (find-tag root current tag-name)]
+        (close-existing-tag root current existing)
+        (open-new-tag root current tag-names)))))
 
 (defn- modifier-map [e]
   {:alt (.-altKey e)
@@ -195,15 +211,29 @@
 (defn- to-modifiers [e]
   (mapv first (filter second (modifier-map e))))
 
-(defn- handle-keypress-event [top current e]
-  (when-let [new-current
-             (handle top @current (cons (.-charCode e) (to-modifiers e)))]
+(defn- print-character [root current [c & modifiers :as key-desc]]
+  (println "Printing character " key-desc)
+  (when-not (some #{:meta :alt} modifiers)
+    (let [new-current (insert-character root current (->char key-desc))]
+      (move-caret new-current)
+      new-current)))
+
+(defn- handle-keypress [root current e]
+  (when-let [new-current (print-character root @current (cons (.-charCode e) (to-modifiers e)))]
     (reset! current new-current)
     (.preventDefault e)))
 
-(defn- edit [top]
-  (let [current (atom top)]
+(defn- handle-keydown [root current e]
+  (when-let [new-current
+             (handle root @current (cons (.-keyCode e) (to-modifiers e)))]
+    (reset! current new-current)
+    (.preventDefault e)))
+
+(defn- edit [root]
+  (let [current (atom root)]
+    (events/listen (dom/getDocument) "keydown"
+                   (partial handle-keydown root current))
     (events/listen (dom/getDocument) "keypress"
-                   (partial handle-keypress-event top current))))
+                   (partial handle-keypress root current))))
 
 (edit (dom/getElement "editor"))
