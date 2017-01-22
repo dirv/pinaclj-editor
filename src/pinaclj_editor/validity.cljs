@@ -18,27 +18,28 @@
    dom/TagName.SUP
    dom/TagName.VAR ])
 
+(def breaking-elements
+  [dom/TagName.ARTICLE
+   dom/TagName.BLOCKQUOTE
+   dom/TagName.DATA
+   dom/TagName.DATALIST
+   dom/TagName.DIV
+   dom/TagName.DFN
+   dom/TagName.FIGURE
+   dom/TagName.H1
+   dom/TagName.H2
+   dom/TagName.H3
+   dom/TagName.H4
+   dom/TagName.H5
+   dom/TagName.H6
+   dom/TagName.HEADER
+   dom/TagName.OL
+   dom/TagName.P
+   dom/TagName.PRE
+   dom/TagName.UL])
+
 (def flow-content
-  (vec (concat
-    phrasing-content
-    [dom/TagName.ARTICLE
-     dom/TagName.BLOCKQUOTE
-     dom/TagName.DATA
-     dom/TagName.DATALIST
-     dom/TagName.DIV
-     dom/TagName.DFN
-     dom/TagName.FIGURE
-     dom/TagName.H1
-     dom/TagName.H2
-     dom/TagName.H3
-     dom/TagName.H4
-     dom/TagName.H5
-     dom/TagName.H6
-     dom/TagName.HEADER
-     dom/TagName.OL
-     dom/TagName.P
-     dom/TagName.PRE
-     dom/TagName.UL])))
+  (vec (concat phrasing-content breaking-elements)))
 
 (def allowed-children
   {dom/TagName.P phrasing-content
@@ -52,27 +53,30 @@
    dom/TagName.OL
    dom/TagName.UL])
 
-(defn- structural? [element]
-  (some #{(.-tagName element)} structural-elements))
+(defn- element? [node]
+  (= (.-nodeType node) (.-ELEMENT_NODE js/window.Node)))
 
-(defn- is-valid-child? [parent child-tag]
-  (let [parent-tag (.-tagName parent)]
-    (or
-      (and (some #{parent-tag} flow-content)
-           (some #{child-tag} phrasing-content))
-      (some #{child-tag} (get allowed-children parent-tag)))))
+(defn- breaking? [node]
+  (when (element? node)
+    (some #{(.-tagName node)} breaking-elements)))
+
+(defn- is-valid-child? [parent-tag child-tag]
+  (or
+    (and (some #{parent-tag} flow-content)
+         (some #{child-tag} phrasing-content))
+    (some #{child-tag} (get allowed-children parent-tag))))
 
 (defn find-insert-point [top current tag-name]
   (cond
-    (is-valid-child? current tag-name)
+    (is-valid-child? (.-tagName current) tag-name)
     current
     (= top current)
     nil
     :else
-    (find-insert-point top (dom/getParentElement current) tag-name)))
+    (find-insert-point top (.-parentElement current) tag-name)))
 
 ; todo get rid of this and use node-path
-(defn find-structural-element [current]
-  (if (structural? current) 
+(defn find-breaking-element [root current]
+  (if (or (= root current) (breaking? current))
     current
-    (find-structural-element (dom/getParentElement current))))
+    (find-breaking-element root (.-parentElement current))))

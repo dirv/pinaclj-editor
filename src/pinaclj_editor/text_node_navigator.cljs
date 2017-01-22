@@ -3,14 +3,20 @@
 (defn- text? [node]
   (= (.-nodeType (.-TEXT_NODE js/window.Node))))
 
-(def last-child-fn #(.-lastChild %))
-(def next-child-fn #(.-nextChild %))
+(defn- element? [node]
+  (= (.-nodeType node) (.-ELEMENT_NODE js/window.Node)))
+
+(defn- not-empty-text? [node]
+  (and (text? node) (not (zero? (.-length node)))))
+
+(def last-child-fn #(and (element? %) (.-lastChild %)))
+(def next-child-fn #(and (element? %) (.-nextChild %)))
 (def previous-sibling-fn #(.-previousSibling %))
 (def next-sibling-fn #(.-nextSibling %))
 
 (defn- find-deepest-child [child-fn node]
   (if-let [child (child-fn node)]
-    (find-deepest-child child child-fn)
+    (find-deepest-child child-fn child)
     node))
 
 (defn- node-seq [sibling-fn child-fn root current-node]
@@ -27,22 +33,21 @@
     (when-not (empty? nodes)
       (first nodes))))
 
-; todo - does not handle empty text-nodes
 (def previous-text-node
-  (partial choose-node previous-sibling-fn last-child-fn text?))
+  (partial choose-node previous-sibling-fn last-child-fn not-empty-text?))
 
-; todo - does not handle empty text-nodes
 (def next-text-node
-  (partial choose-node next-sibling-fn next-child-fn text?))
+  (partial choose-node next-sibling-fn next-child-fn not-empty-text?))
 
 (defn character-left [root text-node position]
   (if (= 0 position)
     (when-let [node (previous-text-node root text-node)]
+      (println "new text: " (.-data node) (.-length node))
       [node (dec (.-length node))])
     [text-node (dec position)]))
 
 (defn character-right [root text-node position]
-  (if (= position (dec (.-length text-node)))
+  (if (= position (.-length text-node))
     (when-let [node (next-text-node root text-node)]
       [node 0])
     [text-node (inc position)]))
