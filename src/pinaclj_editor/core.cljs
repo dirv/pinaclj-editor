@@ -152,7 +152,6 @@
   (let [insert-point (validity/find-insert-point root (.-parentElement text-node) tag-name)
         re-tags (filter (partial validity/is-valid-child? tag-name)
                         (tags-between text-node insert-point))]
-
     (when-not (= (.-parentElement text-node) insert-point)
       (remove-empty-nodes insert-point text-node))
     (insert-text-node (append-tree insert-point (concat tag-names re-tags)))))
@@ -177,6 +176,30 @@
 (defn- append-default-structural-element [node tags-between]
   (insert-text-node (append-tree node (cons default-structural-element tags-between))))
 
+(defn- ->caret [rng]
+  [(.-startContainer rng) (.-startOffset rng)])
+
+(defn- insertAfter [before element]
+  (.insertBefore (.-parentElement before) element (.-nextSibling before)))
+
+(defn- siblings [first-child]
+  (if first-child
+    (cons first-child (siblings (.-nextSibling first-child)))
+    '()))
+
+(defn- all-siblings-after [breaker node]
+  (rest (drop-while #(not (.contains % node)) (siblings (.-firstChild breaker)))))
+
+(defn- break-at-enter [breaker [text-node position] re-tags]
+  (let [next-nodes (all-siblings-after breaker text-node)
+        new-text-node (.splitText text-node position)]
+    (dom/removeNode new-text-node)
+    (doall (map dom/removeNode next-nodes))
+    (let [new-parent-node (insertAfter breaker (create-tree (cons "P" re-tags)))]
+      (.appendChild (deepest-child new-parent-node) new-text-node)
+      (doall (map #(.appendChild new-parent-node %) next-nodes))
+      (place-caret new-text-node))))
+
 (defn- handle-enter [root text-node]
   (let [breaker (validity/find-breaking-element root text-node)
         tags-between (tags-between text-node breaker)]
@@ -187,7 +210,7 @@
           (close-list breaker li-element (tags-between text-node li-element))
           (insert-text-node (append-tree breaker tags-between))))
       :else
-      (append-default-structural-element (.-parentElement breaker) tags-between))))
+      (break-at-enter breaker (->caret (get-range)) tags-between))))
 
 (defn- insert-backspace [root text-node]
   (if-let [new-boundary (move-caret root text-node :move-character-left)]
@@ -281,7 +304,7 @@
     (.preventDefault e)))
 
 (defn- handle-mouseup [e]
-  (println "Caret: " (.-startContainer (get-range))))
+  (println "Caret: " (.-data (.-startContainer (get-range)))))
 
 (defn- edit [root]
   (let [current (atom (append-default-structural-element root []))]
