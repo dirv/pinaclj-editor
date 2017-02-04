@@ -42,7 +42,6 @@
 (defn character-left [root text-node position]
   (if (= 0 position)
     (when-let [node (previous-text-node root text-node)]
-      (println "new text: " (.-data node) (.-length node))
       [node (dec (.-length node))])
     [text-node (dec position)]))
 
