@@ -1,5 +1,6 @@
 (ns pinaclj-editor.validity
-  (:require [goog.dom :as dom]))
+  (:require [goog.dom :as dom]
+            [pinaclj-editor.dom :as pdom]))
 
 (def phrasing-content
   [dom/TagName.A
@@ -57,7 +58,7 @@
   (= (.-nodeType node) (.-ELEMENT_NODE js/window.Node)))
 
 (defn- breaking? [node]
-  (when (element? node)
+  (and (element? node)
     (some #{(.-tagName node)} breaking-elements)))
 
 (defn- is-valid-child? [parent-tag child-tag]
@@ -66,17 +67,8 @@
          (some #{child-tag} phrasing-content))
     (some #{child-tag} (get allowed-children parent-tag))))
 
-(defn find-insert-point [top current tag-name]
-  (cond
-    (is-valid-child? (.-tagName current) tag-name)
-    current
-    (= top current)
-    nil
-    :else
-    (find-insert-point top (.-parentElement current) tag-name)))
+(defn find-insert-point [current tag-name]
+  (some #(when (is-valid-child? (.-tagName %) tag-name) %) (pdom/node-path current)))
 
-; todo get rid of this and use node-path
-(defn find-breaking-element [root current]
-  (if (or (= root current) (breaking? current))
-    current
-    (find-breaking-element root (.-parentElement current))))
+(defn find-breaking-element [current]
+ (some #(when (breaking? %) %) (pdom/node-path current)))

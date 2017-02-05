@@ -2,59 +2,13 @@
   (:require [clojure.browser.repl :as repl]
             [goog.dom :as dom]
             [goog.events :as events]
+            [pinaclj-editor.dom :as pdom]
             [pinaclj-editor.caret :as caret]
             [pinaclj-editor.text-node-navigator :as text]
             [pinaclj-editor.validity :as validity])
   (:import [goog.events KeyCodes]))
 
 (enable-console-print!)
-
-(defn- insert-after [before element]
-  (.insertBefore (.-parentElement before) element (.-nextSibling before)))
-
-(defn- create-tree [[tag & tags]]
-  (let [elem (.createElement js/document tag)]
-    (when (seq? tags)
-      (.appendChild elem (create-tree tags)))
-    elem))
-
-(defn- append-child [parent child]
-  (.appendChild parent child)
-  child)
-
-(defn- deepest-child [node]
-  (if-let [child (.-firstChild node)]
-    (deepest-child child)
-    node))
-
-(defn- append-tree [parent tags]
-  (let [children (create-tree tags)]
-    (append-child parent children)
-    (deepest-child children)))
-
-(defn- insert-tree-before [parent sibling tags]
-  (let [children (create-tree tags)]
-    (.insertBefore parent children sibling)
-    (deepest-child children)))
-
-(defn- find-tag [root leaf tag-name]
-  (cond
-    (= root leaf)
-    nil
-    (= (.-tagName leaf) tag-name)
-    leaf
-    :else
-    (find-tag root (.-parentElement leaf) tag-name)))
-
-(defn- tags-between [current elem]
-  (let [this-tag (.-tagName current)]
-    (cond
-      (= (.-tagName current) (.-tagName elem))
-      []
-      (= nil (.-tagName current))
-      (tags-between (.-parentElement current) elem)
-      :else
-      (conj (tags-between (.-parentElement current) elem) this-tag))))
 
 (def modifier-mappings
   {[(.-B KeyCodes) :meta] [dom/TagName.STRONG]
@@ -86,130 +40,106 @@
    [(.-RIGHT KeyCodes) :meta] :move-line-right
    })
 
+
+
 (defn- move-caret [root [start-container start-offset end-container end-offset] movement-type]
-  (apply caret/caret-at
-    (case movement-type
-      :move-character-left
-      (text/character-left root start-container start-offset)
-      :move-character-right
-      (text/character-right root end-container end-offset)
-      :move-word-left
-      (text/word-left root start-container start-offset)
-      :move-word-right
-      (text/word-right root end-container end-offset))))
-
-(defn- append-text-node [parent]
-  (caret/place-caret (append-child parent (.createTextNode js/document ""))))
-
-(defn- insert-text-node-after [current]
-  (let [node (dom/createTextNode "")]
-    (insert-after current node)
-    (caret/place-caret node)))
-
-(defn- node-path [root node]
-  (if (= root node)
-    []
-    (cons node (node-path root (.-parentElement node)))))
-
-(defn- node-empty? [node]
-  (= 0 (count (dom/getTextContent node))))
-
-(defn- all-empty [root current]
-  (take-while node-empty? (node-path root current)))
-
-(defn- remove-empty-nodes [root text-node]
-  (if-let [empty-tree (seq (all-empty root text-node))]
-    (dom/removeNode (last empty-tree))))
+  (caret/keep-within
+    root
+    (apply caret/caret-at
+           (case movement-type
+             :move-character-left
+             (text/character-left start-container start-offset)
+             :move-character-right
+             (text/character-right end-container end-offset)
+             :move-word-left
+             (text/word-left start-container start-offset)
+             :move-word-right
+             (text/word-right end-container end-offset)))))
 
 ; todo: append is probably not the right thing, need to choose the node after the current node passed in, rather than the end node
 ; todo: retags should only choose phrasing content
 ; todo: this needs to delete any empty previous tags
-(defn- open-new-tag [root text-node [tag-name :as tag-names]]
-  (let [insert-point (validity/find-insert-point root (.-parentElement text-node) tag-name)
+(defn- open-new-tag [text-node [tag-name :as tag-names]]
+  (let [insert-point (validity/find-insert-point (.-parentElement text-node) tag-name)
         re-tags (filter (partial validity/is-valid-child? tag-name)
-                        (tags-between text-node insert-point))]
+                        (pdom/tags-between text-node insert-point))]
     (when-not (= (.-parentElement text-node) insert-point)
-      (remove-empty-nodes insert-point text-node))
-    (append-text-node (append-tree insert-point (concat tag-names re-tags)))))
+      (pdom/remove-empty-nodes text-node))
+    (pdom/append-tree insert-point (concat tag-names re-tags [""]))))
 
-(defn- close-existing-tag [root current existing]
-  (let [re-tags (tags-between current existing)]
-    (if (empty? re-tags)
-      (insert-text-node-after existing)
-      (append-text-node (append-tree (validity/find-insert-point root (.-parentElement existing) (first re-tags)) re-tags)))))
+(defn- close-existing-tag [current existing]
+  (pdom/insert-tree-after existing (pdom/tags-between current existing)))
 
-(def default-structural-element dom/TagName.P)
-
-(defn- insert-default-structural-element [parent after-sibling tags-between]
-  (append-text-node (insert-tree-before parent after-sibling (cons default-structural-element tags-between))))
+(def default-structural-nodes ["P" ""])
 
 (defn- close-list [list-element li-element re-tags]
-  (.removeNode li-element)
-  (let [caret (insert-default-structural-element (.-parentElement list-element) (.-nextSibling list-element) re-tags)]
+  (pdom/remove-node li-element)
+  (let [text-node (pdom/insert-tree-before (.-parentElement list-element)
+                                           (.-nextSibling list-element)
+                                           (concat re-tags default-structural-nodes))]
     (if (= 0 (count (.-children list-element)))
-      (.removeNode list-element))
-    caret))
+      (pdom/remove-node list-element))
+    (caret/place-caret text-node)))
 
-(defn- siblings [first-child]
-  (if first-child
-    (cons first-child (siblings (.-nextSibling first-child)))
-    '()))
+(defn- reparent-next-siblings [search-node old-parent new-parent]
+  (doseq [sibling (vec (pdom/all-siblings-after old-parent search-node))]
+    (pdom/reparent new-parent sibling)))
 
-(defn- all-siblings-after [breaker node]
-  (rest (drop-while #(not (.contains % node)) (siblings (.-firstChild breaker)))))
+(defn- move-next-siblings [new-parent node-hierarchy]
+  (dorun (map (partial reparent-next-siblings (first node-hierarchy))
+    node-hierarchy
+    (pdom/node-path new-parent))))
 
+; note, this could also work for li potentially
 (defn- break-at-enter [breaker [text-node position] re-tags]
-  (let [next-nodes (all-siblings-after breaker text-node)
-        new-text-node (.splitText text-node position)]
-    (dom/removeNode new-text-node)
-    (doall (map dom/removeNode next-nodes))
-    (let [new-parent-node (insert-after breaker (create-tree (cons "P" re-tags)))]
-      (.appendChild (deepest-child new-parent-node) new-text-node)
-      (doall (map #(.appendChild new-parent-node %) next-nodes))
-      (caret/place-caret new-text-node))))
+  (let [new-text-node (.splitText text-node position)
+        deepest-child (pdom/insert-tree-after breaker re-tags)]
+    (move-next-siblings deepest-child (pdom/nodes-between-inclusive text-node breaker))
+    (caret/place-caret new-text-node)))
 
-(defn- handle-enter [root _]
-  (let [caret (caret/delete-range)
+(defn- handle-enter [_]
+  (let [caret (caret/delete-range) ; todo- is this the right place for it?
         text-node (nth caret 2)
-        breaker (validity/find-breaking-element root text-node)
-        tags-between (tags-between text-node breaker)]
+        breaker (validity/find-breaking-element text-node)
+        tags-between (pdom/tags-between text-node breaker)]
     (cond
       (= dom/TagName.OL (.-tagName breaker))
-      (let [li-element (find-tag breaker text-node dom/TagName.LI)]
-        (if (node-empty? text-node)
-          (close-list breaker li-element (tags-between text-node li-element))
-          (append-text-node (insert-tree-before breaker (.-nextSibling li-element) tags-between))))
+      (let [li-element (pdom/find-tag text-node dom/TagName.LI)]
+        (if (pdom/node-empty? text-node)
+          (close-list breaker li-element (pdom/tags-between text-node li-element))
+          (break-at-enter breaker caret (cons "LI" tags-between))))
       :else
-      (break-at-enter breaker caret tags-between))))
+      (break-at-enter breaker caret (cons "P" tags-between))))) ; todo - use inclusive?
 
 ; todo - not sure if that works correctly across all nodes now
+; todo - this could be used for the delete key too...
 (defn- delete-one-character [root caret]
   (when-let [new-caret (move-caret root caret :move-character-left)]
     (.deleteData (first new-caret) (second new-caret) 1)
     (if-not (= (first new-caret) (first caret))
-      (remove-empty-nodes root (first caret)))
+      (pdom/remove-empty-nodes (first caret)))
     new-caret))
 
 (defn- insert-backspace [root [start-container start-offset end-container end-offset :as caret]]
   (if (caret/selection? caret)
-    (caret/delete-range)
+    (caret/delete-range)  ; todo - need to ensure that the range is within our own document
     (delete-one-character root caret)))
 
-(defn- insert-character [root [start-container start-offset end-container end-offset] c]
+(defn- insert-character [[start-container start-offset end-container end-offset] c]
   (.insertData end-container end-offset c)
   (caret/caret-at end-container (inc end-offset)))
 
 ; todo - needs to change to take into account left or right side of caret.
-(defn- extend-range [root [start-container start-offset end-container end-offset] selection-type]
+(defn- extend-range [[start-container start-offset end-container end-offset] selection-type]
   (case selection-type
       :word-left
-      (concat (text/word-left root start-container start-offset) [end-container end-offset])
+      (concat (text/word-left start-container start-offset) [end-container end-offset])
       :word-right
-      (concat [start-container start-offset] (text/word-right root end-container end-offset))
+      (concat [start-container start-offset] (text/word-right end-container end-offset))
       :character-left
-      (concat (text/character-left root start-container start-offset) [end-container end-offset])
+      (concat (text/character-left start-container start-offset) [end-container end-offset])
       :character-right
-      (concat [start-container start-offset] (text/character-right root end-container end-offset))
+      (concat [start-container start-offset] (text/character-right end-container end-offset))
       :line-left
       (println "not implemented yet")
       :line-right
@@ -218,29 +148,28 @@
       (println "not implemented yet")))
 
 ; todo - this should work on selections too
-(defn- decorate-nodes [root tags caret]
+(defn- decorate-nodes [tags caret]
   (when-not (caret/selection? caret)
-    (let [element (first caret)]
-      (if-let [existing (find-tag root element (first tags))]
-        (close-existing-tag root element existing)
-        (open-new-tag root element tags)))))
+    (caret/place-caret
+      (let [element (first caret)]
+      (if-let [existing (pdom/find-tag element (first tags))]
+        (close-existing-tag element existing)
+        (open-new-tag element tags))))))
 
-; todo - some of these may require deleting text in caret first.
-; take into account the ones that delete text (backspace, enter)
-; maybe backspace and enter can actually be done in insert-charater?
+; todo - delete selection first
 (defn- perform-action [root [c & modifiers :as key-desc] caret]
   (println "Handling key combo" key-desc)
   (cond
     (= c (.-BACKSPACE KeyCodes))
     (insert-backspace root caret)
     (= c (.-ENTER KeyCodes))
-    (handle-enter root caret)
+    (handle-enter caret)
     (and (contains? movement-mappings key-desc))
     (move-caret root caret (get movement-mappings key-desc))
     (and (contains? selection-mappings key-desc))
-    (extend-range root caret (get selection-mappings key-desc))
+    (extend-range caret (get selection-mappings key-desc))
     (and (contains? modifier-mappings key-desc))
-    (decorate-nodes root (get modifier-mappings key-desc) caret)))
+    (decorate-nodes (get modifier-mappings key-desc) caret)))
 
 (defn- ->char [[c & modifiers]]
   (let [ch (char c)]
@@ -248,14 +177,11 @@
       ch
       (.toLowerCase ch))))
 
-; todo: ensure caret moves properly
-; todo: ensure that this caret is a text-node.
-(defn- print-character [root [c & modifiers :as key-desc] _]
+(defn- print-character [[c & modifiers :as key-desc] _]
   (println "Printing character " key-desc)
   (when-not (some #{:meta :alt} modifiers)
     (let [caret (caret/delete-range)]
-      (insert-character root caret (->char key-desc))
-      (move-caret root caret :move-character-right))))
+      (insert-character caret (->char key-desc)))))
 
 (defn- modifier-map [e]
   {:alt (.-altKey e)
@@ -267,7 +193,7 @@
   (mapv first (filter second (modifier-map e))))
 
 (defn- handle-keypress [root e]
-  (when (caret/do-update (partial print-character root (cons (.-charCode e) (modifiers-of e))))
+  (when (caret/do-update (partial print-character (cons (.-charCode e) (modifiers-of e))))
     (.preventDefault e)))
 
 (defn- handle-keydown [root e]
@@ -275,11 +201,10 @@
     (.preventDefault e)))
 
 (defn- handle-mouseup [root e]
-  (println "Caret: " )
   (caret/do-update (partial println)))
 
 (defn- initialize-document [root _]
-  (insert-default-structural-element root nil []))
+  (caret/place-caret (pdom/append-tree root default-structural-nodes)))
 
 (defn- edit [root]
   (caret/do-update (partial initialize-document root))

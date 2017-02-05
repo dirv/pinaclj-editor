@@ -1,4 +1,5 @@
-(ns pinaclj-editor.caret)
+(ns pinaclj-editor.caret
+  (:require [pinaclj-editor.text-node-navigator :as nav]))
 
 (defn- create-range []
   (.createRange js/document))
@@ -43,3 +44,21 @@
     (some->> (->caret rng)
              (update-fn)
              (update-caret rng))))
+
+(defn- find-boundary [find-child-fn find-character-fn root]
+  (let [node (nav/next-text-node root)]
+    [node (find-character-fn node)]))
+
+(defn- keep-boundary-within [root [container offset :as caret]]
+  (let [position (.compareDocumentPosition root container)]
+    (cond
+      (= 16 (bit-and position 16))
+      caret
+      (= 2 (bit-and position 2))
+      (find-boundary nav/first-child-fn nav/first-character-fn root)
+      (= 4 (bit-and position 4))
+      (find-boundary nav/last-child-fn nav/last-character-fn root))))
+
+(defn keep-within [root caret]
+  (concat (keep-boundary-within root (take 2 caret))
+          (keep-boundary-within root (drop 2 caret))))
