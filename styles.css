@@ -1,0 +1,11 @@
+body {
+  font-family: 'Athiti', sans-serif;
+  line-height: 1.6em;
+  font-size: 12p;t
+}
+
+
+div#editor {
+  margin-left: 200px;
+  width: 600px;
+}
