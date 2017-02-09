@@ -39,25 +39,30 @@
 (defn selection? [[start-container start-offset end-container end-offset]]
   (not (and (= start-container end-container) (= start-offset end-offset))))
 
+(defn- update-with-range [update-fn rng]
+  (->> rng
+      (->caret)
+      (update-fn)
+      (update-caret rng)))
+
 (defn do-update [update-fn]
-  (let [rng (get-range)]
-    (some->> (->caret rng)
-             (update-fn)
-             (update-caret rng))))
+  (update-with-range update-fn (get-range)))
 
 (defn- find-boundary [find-child-fn find-character-fn root]
   (let [node (nav/next-text-node root)]
     [node (find-character-fn node)]))
 
-(defn- keep-boundary-within [root [container offset :as caret]]
-  (let [position (.compareDocumentPosition root container)]
-    (cond
-      (= 16 (bit-and position 16))
-      caret
-      (= 2 (bit-and position 2))
-      (find-boundary nav/first-child-fn nav/first-character-fn root)
-      (= 4 (bit-and position 4))
-      (find-boundary nav/last-child-fn nav/last-character-fn root))))
+(defn- adjust-using-position [position root caret]
+  (cond
+    (= 16 (bit-and position 16))
+    caret
+    (= 2 (bit-and position 2))
+    (find-boundary nav/first-child-fn nav/first-character-fn root)
+    (= 4 (bit-and position 4))
+    (find-boundary nav/last-child-fn nav/last-character-fn root)))
+
+(defn- keep-boundary-within [root [container _ :as caret]]
+  (adjust-using-position (.compareDocumentPosition root container) root caret))
 
 (defn keep-within [root caret]
   (concat (keep-boundary-within root (take 2 caret))
