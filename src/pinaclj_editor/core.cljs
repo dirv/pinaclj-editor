@@ -40,8 +40,6 @@
    [(.-RIGHT KeyCodes) :meta] :move-line-right
    })
 
-
-
 (defn- move-caret [root [start-container start-offset end-container end-offset] movement-type]
   (caret/keep-within
     root
