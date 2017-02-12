@@ -31,6 +31,7 @@
     (->caret rng)))
 
 (defn caret-at [text-node position]
+  (println "Caret at" (.-textContent text-node) position)
   [text-node position text-node position])
 
 (defn place-caret [text-node]
@@ -53,6 +54,7 @@
     [node (find-character-fn node)]))
 
 (defn- adjust-using-position [position root caret]
+  (println "Position " position)
   (cond
     (= 16 (bit-and position 16))
     caret

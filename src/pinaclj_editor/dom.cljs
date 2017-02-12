@@ -1,5 +1,14 @@
 (ns pinaclj-editor.dom)
 
+(def structural-elements ["BLOCKQUOTE" "DATA" "DATALIST" "DFN" "FIGURE" "H1" "H2" "H3" "H4" "H5" "H6" "OL" "P" "PRE" "UL"])
+
+(def parent-element #(.-parentElement %))
+(def tag #(when % (.-tagName %)))
+(def node-type #(when % (.-nodeType %)))
+
+(defn is-one-of? [node elements]
+  (some #{(tag node)} elements))
+
 (defmulti create-element identity)
 (defmethod create-element "" [_] (.createTextNode js/document ""))
 (defmethod create-element nil [_] (.createTextNode js/document ""))
@@ -23,7 +32,6 @@
   child)
 
 (defn reparent [new-parent node]
-  (println "Reparenting " (.-textContent node))
   (append-child new-parent (remove-node node)))
 
 (defn node-path [node]

@@ -109,13 +109,14 @@
       :else
       (break-at-enter breaker caret (cons "P" tags-between))))) ; todo - use inclusive?
 
-; todo - not sure if that works correctly across all nodes now
 ; todo - this could be used for the delete key too...
 (defn- delete-one-character [root caret]
   (when-let [new-caret (move-caret root caret :move-character-left)]
-    (.deleteData (first new-caret) (second new-caret) 1)
-    (if-not (= (first new-caret) (first caret))
-      (pdom/remove-empty-nodes (first caret)))
+    (when (not= new-caret caret)
+      (println "moved to " (.-textContent (first new-caret)) (second new-caret))
+      (.deleteData (first new-caret) (second new-caret) 1)
+      (if-not (= (first new-caret) (first caret))
+        (pdom/remove-empty-nodes (first caret))))
     new-caret))
 
 (defn- insert-backspace [root [start-container start-offset end-container end-offset :as caret]]
@@ -202,7 +203,9 @@
   (caret/do-update (partial println)))
 
 (defn- initialize-document [root _]
-  (caret/place-caret (pdom/append-tree root default-structural-nodes)))
+  (caret/place-caret
+    (or (first (text/forwards-traversal root))
+        (pdom/append-tree root default-structural-nodes))))
 
 (defn- edit [root]
   (caret/do-update (partial initialize-document root))
