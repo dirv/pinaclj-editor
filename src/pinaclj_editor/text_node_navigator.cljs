@@ -2,7 +2,7 @@
   (:require [pinaclj-editor.dom :as dom]))
 
 (defn- text? [node]
-  (and (dom/is-one-of? (dom/parent-element node) dom/structural-elements)
+  (and (dom/structural-parent node)
        (= (dom/node-type node) (.-TEXT_NODE js/window.Node))))
 
 (defn- element? [node]
@@ -30,47 +30,65 @@
 (defn- filter-nodes [sibling-fn child-fn choose-fn? current-node]
   (filter choose-fn? (dfs-traverse-nodes sibling-fn child-fn current-node)))
 
-(def backwards-traversal
+(def backwards-node-traversal
   (partial filter-nodes previous-sibling-fn last-child-fn text?))
 
-(def forwards-traversal
+(def forwards-node-traversal
   (partial filter-nodes next-sibling-fn first-child-fn text?))
-
-(defn- is-whitespace? [index c]
-  (when (= \  c) index)) ; todo - this is not the right test for whitespace
-
-(def whitespace-indices (partial keep-indexed is-whitespace?))
-
-(def reverse-whitespace-indices (comp reverse whitespace-indices))
 
 (def all-indices #(range 0 (inc (.-length %))))
 (def reverse-all-indices (comp reverse all-indices))
 
-(defn- matching-characters [character-match-fn traversal-fn text-node]
-  (mapcat #(map vector (repeat %) (character-match-fn (.-data %)))
-          (traversal-fn text-node)))
+(defn- ->caret [node position]
+  [node position])
 
-(defn- before-this? [text-node position [new-node new-position]]
-  (or (not= text-node new-node)
-      (< new-position position)))
+(defn caret-traversal [index-fn traversal-fn match-fn node position]
+  (println "Nodes" (map #(.-tagName (dom/parent-element %)) (traversal-fn node)))
+  (drop-while #(match-fn position (second %))
+              (mapcat #(map ->caret (repeat %) (index-fn (.-data %)))
+                      (traversal-fn node))))
 
-(defn- after-this? [text-node position [new-node new-position]]
-  (or (not= text-node new-node)
-      (> new-position position)))
+(def backwards-caret-traversal
+  (partial caret-traversal reverse-all-indices backwards-node-traversal <))
 
-(defn- choose-caret [skip-fn character-match-fn traversal-fn text-node position]
-  (or (some #(when (skip-fn text-node position %) %)
-            (matching-characters character-match-fn traversal-fn text-node))
-      [text-node position]))
+(def forwards-caret-traversal
+  (partial caret-traversal all-indices forwards-node-traversal >))
+
+(defn- is-whitespace? [c]
+  (= \  c)) ; todo - this is not the right test for whitespace
+
+(defn- some-or-last [pred [x & xs]]
+  (if (seq xs)
+    (or (pred x) (recur pred xs))
+    x))
+
+(defn- choose-caret [skip-fn traversal-fn text-node position]
+  (some-or-last #(when (skip-fn text-node position %) %)
+                (traversal-fn text-node position)))
+
+(defn- not-same? [current-node current-position new-node new-position]
+  (not (and (= current-node new-node) (= current-position new-position))))
+
+(defn- ending? [node position]
+  (= position (count (.-data node))))
+
+(defn- word-boundary? [node-a position-a [node-b position-b]]
+  (and (not-same? node-a position-a node-b position-b)
+       (or (is-whitespace? (get (.-data node-b) position-b))
+           (not= (dom/structural-parent node-a) (dom/structural-parent node-b)))))
+
+(defn- different-character? [current-node current-position [new-node new-position]]
+  (and (not-same? current-node current-position new-node new-position)
+       (not (ending? new-node new-position))))
 
 (def word-left
-  (partial choose-caret before-this? reverse-whitespace-indices backwards-traversal))
+  (partial choose-caret word-boundary? backwards-caret-traversal))
 
 (def word-right
-  (partial choose-caret after-this? whitespace-indices forwards-traversal))
+  (partial choose-caret word-boundary? forwards-caret-traversal))
 
 (def character-left
-  (partial choose-caret before-this? reverse-all-indices backwards-traversal))
+  (partial choose-caret different-character? backwards-caret-traversal))
 
 (def character-right
-  (partial choose-caret after-this? all-indices forwards-traversal))
+  (partial choose-caret different-character? forwards-caret-traversal))

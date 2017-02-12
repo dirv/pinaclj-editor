@@ -1,6 +1,6 @@
 (ns pinaclj-editor.dom)
 
-(def structural-elements ["BLOCKQUOTE" "DATA" "DATALIST" "DFN" "FIGURE" "H1" "H2" "H3" "H4" "H5" "H6" "OL" "P" "PRE" "UL"])
+(def structural-elements #{"BLOCKQUOTE" "DATA" "DATALIST" "DFN" "FIGURE" "H1" "H2" "H3" "H4" "H5" "H6" "OL" "P" "PRE" "UL"})
 
 (def parent-element #(.-parentElement %))
 (def tag #(when % (.-tagName %)))
@@ -87,3 +87,6 @@
 
 (defn all-siblings-after [parent search-node]
   (next-siblings (child-containing-node parent search-node)))
+
+(defn structural-parent [node]
+  (some #(when (structural-elements (.-tagName %)) %) (node-path node)))

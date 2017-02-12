@@ -203,9 +203,9 @@
   (caret/do-update (partial println)))
 
 (defn- initialize-document [root _]
-  (caret/place-caret
-    (or (first (text/forwards-traversal root))
-        (pdom/append-tree root default-structural-nodes))))
+  (apply caret/caret-at
+    (or (first (text/forwards-caret-traversal root 0))
+        [(pdom/append-tree root default-structural-nodes) 0])))
 
 (defn- edit [root]
   (caret/do-update (partial initialize-document root))

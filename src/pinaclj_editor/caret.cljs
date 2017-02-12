@@ -59,9 +59,9 @@
     (= 16 (bit-and position 16))
     caret
     (= 2 (bit-and position 2))
-    (find-boundary nav/forwards-traversal nav/first-character-fn root)
+    (find-boundary nav/forwards-caret-traversal nav/first-character-fn root)
     (= 4 (bit-and position 4))
-    (find-boundary nav/backwards-traversal nav/last-character-fn root)))
+    (find-boundary nav/backwards-caret-traversal nav/last-character-fn root)))
 
 (defn- keep-boundary-within [root [container _ :as caret]]
   (adjust-using-position (.compareDocumentPosition root container) root caret))
