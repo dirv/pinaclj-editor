@@ -32,7 +32,11 @@
   child)
 
 (defn reparent [new-parent node]
+  (println "Reparting")
   (append-child new-parent (remove-node node)))
+
+(defn children [node]
+  (array-seq (.-childNodes node)))
 
 (defn node-path [node]
   (take-while some? (iterate #(.-parentElement %) node)))
@@ -83,10 +87,18 @@
   (drop 1 (take-while some? (iterate #(.-nextSibling %) element))))
 
 (defn child-containing-node [parent search-node]
-  (some #(when (.contains % search-node) %) (array-seq (.-childNodes parent))))
+  (some #(when (.contains % search-node) %) (children parent)))
 
 (defn all-siblings-after [parent search-node]
   (next-siblings (child-containing-node parent search-node)))
 
 (defn structural-parent [node]
   (some #(when (structural-elements (.-tagName %)) %) (node-path node)))
+
+(defn merge-nodes [first-node second-node]
+  (doall (map (partial reparent first-node) (vec (children second-node))))
+  (remove-empty-nodes second-node))
+
+(defn delete-single-character [[node position]]
+  (.deleteData node position 1)
+  (remove-empty-nodes node))

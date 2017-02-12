@@ -43,7 +43,6 @@
   [node position])
 
 (defn caret-traversal [index-fn traversal-fn match-fn node position]
-  (println "Nodes" (map #(.-tagName (dom/parent-element %)) (traversal-fn node)))
   (drop-while #(match-fn position (second %))
               (mapcat #(map ->caret (repeat %) (index-fn (.-data %)))
                       (traversal-fn node))))
@@ -79,7 +78,8 @@
 
 (defn- different-character? [current-node current-position [new-node new-position]]
   (and (not-same? current-node current-position new-node new-position)
-       (not (ending? new-node new-position))))
+       (or (not= (dom/structural-parent current-node) (dom/structural-parent new-node))
+         (not (ending? new-node new-position)))))
 
 (def word-left
   (partial choose-caret word-boundary? backwards-caret-traversal))

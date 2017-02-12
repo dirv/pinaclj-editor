@@ -110,19 +110,19 @@
       (break-at-enter breaker caret (cons "P" tags-between))))) ; todo - use inclusive?
 
 ; todo - this could be used for the delete key too...
-(defn- delete-one-character [root caret]
-  (when-let [new-caret (move-caret root caret :move-character-left)]
+(defn- delete-and-merge [root [current-node current-position :as caret]]
+  (when-let [[new-node new-position :as new-caret] (move-caret root caret :move-character-left)]
     (when (not= new-caret caret)
-      (println "moved to " (.-textContent (first new-caret)) (second new-caret))
-      (.deleteData (first new-caret) (second new-caret) 1)
-      (if-not (= (first new-caret) (first caret))
-        (pdom/remove-empty-nodes (first caret))))
+      (let [structural-parents (map pdom/structural-parent [current-node new-node])]
+        (if (apply not= structural-parents)
+          (apply pdom/merge-nodes structural-parents)
+          (pdom/delete-single-character new-caret))))
     new-caret))
 
 (defn- insert-backspace [root [start-container start-offset end-container end-offset :as caret]]
   (if (caret/selection? caret)
     (caret/delete-range)  ; todo - need to ensure that the range is within our own document
-    (delete-one-character root caret)))
+    (delete-and-merge root caret)))
 
 (defn- insert-character [[start-container start-offset end-container end-offset] c]
   (.insertData end-container end-offset c)
