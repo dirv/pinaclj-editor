@@ -54,19 +54,15 @@
              :move-word-right
              (text/word-right end-container end-offset)))))
 
-; todo: append is probably not the right thing, need to choose the node after the current node passed in, rather than the end node
-; todo: retags should only choose phrasing content
-; todo: this needs to delete any empty previous tags
-(defn- open-new-tag [text-node [tag-name :as tag-names]]
-  (let [insert-point (validity/find-insert-point (.-parentElement text-node) tag-name)
-        re-tags (filter (partial validity/is-valid-child? tag-name)
-                        (pdom/tags-between text-node insert-point))]
-    (when-not (= (.-parentElement text-node) insert-point)
-      (pdom/remove-empty-nodes text-node))
-    (pdom/append-tree insert-point (concat tag-names re-tags [""]))))
+(defn- open-new-tag [[text-node position :as caret] [tag-name :as tag-names]]
+  (let [insert-point (validity/find-insert-point text-node tag-name)
+        new-text-node (pdom/split-tree insert-point caret)]
+    (pdom/remove-empty-nodes new-text-node)
+    (pdom/insert-tree-after insert-point (concat tag-names [""]))))
 
-(defn- close-existing-tag [current existing]
-  (pdom/insert-tree-after existing (pdom/tags-between current existing)))
+; todo - this needs to place the caret right where it already was
+(defn- close-existing-tag [[node _ :as caret] existing]
+  (pdom/split-tree-with-tags existing caret (pdom/tags-between node existing)))
 
 (def default-structural-nodes ["P" ""])
 
@@ -79,35 +75,21 @@
       (pdom/remove-node list-element))
     (caret/place-caret text-node)))
 
-(defn- reparent-next-siblings [search-node old-parent new-parent]
-  (doseq [sibling (vec (pdom/all-siblings-after old-parent search-node))]
-    (pdom/reparent new-parent sibling)))
-
-(defn- move-next-siblings [new-parent node-hierarchy]
-  (dorun (map (partial reparent-next-siblings (first node-hierarchy))
-    node-hierarchy
-    (pdom/node-path new-parent))))
-
-; note, this could also work for li potentially
-(defn- break-at-enter [breaker [text-node position] re-tags]
-  (let [new-text-node (.splitText text-node position)
-        deepest-child (pdom/insert-tree-after breaker re-tags)]
-    (move-next-siblings deepest-child (pdom/nodes-between-inclusive text-node breaker))
-    (caret/place-caret new-text-node)))
+(defn- break-at-enter [breaker caret]
+  (caret/place-caret (pdom/split-tree breaker caret)))
 
 (defn- handle-enter [_]
   (let [caret (caret/delete-range) ; todo- is this the right place for it?
         text-node (nth caret 2)
-        breaker (validity/find-breaking-element text-node)
-        tags-between (pdom/tags-between text-node breaker)]
+        breaker (validity/find-breaking-element text-node)]
     (cond
       (= dom/TagName.OL (.-tagName breaker))
       (let [li-element (pdom/find-tag text-node dom/TagName.LI)]
         (if (pdom/node-empty? text-node)
           (close-list breaker li-element (pdom/tags-between text-node li-element))
-          (break-at-enter breaker caret (cons "LI" tags-between))))
+          (break-at-enter breaker caret)))
       :else
-      (break-at-enter breaker caret (cons "P" tags-between))))) ; todo - use inclusive?
+      (break-at-enter breaker caret))))
 
 ; todo - this could be used for the delete key too...
 (defn- delete-and-merge [root [current-node current-position :as caret]]
@@ -151,9 +133,9 @@
   (when-not (caret/selection? caret)
     (caret/place-caret
       (let [element (first caret)]
-      (if-let [existing (pdom/find-tag element (first tags))]
-        (close-existing-tag element existing)
-        (open-new-tag element tags))))))
+        (if-let [existing (pdom/find-tag element (first tags))]
+          (close-existing-tag caret existing)
+          (open-new-tag caret tags))))))
 
 ; todo - delete selection first
 (defn- perform-action [root [c & modifiers :as key-desc] caret]

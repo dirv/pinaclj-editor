@@ -43,7 +43,8 @@
   (vec (concat phrasing-content breaking-elements)))
 
 (def allowed-children
-  {dom/TagName.P phrasing-content
+  {nil phrasing-content
+   dom/TagName.P phrasing-content
    dom/TagName.LI flow-content
    dom/TagName.OL [dom/TagName.LI]
    dom/TagName.UL [dom/TagName.UL]

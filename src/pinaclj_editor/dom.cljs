@@ -32,7 +32,6 @@
   child)
 
 (defn reparent [new-parent node]
-  (println "Reparting")
   (append-child new-parent (remove-node node)))
 
 (defn children [node]
@@ -83,6 +82,9 @@
 (defn tags-between [child stop-node]
   (reverse (map #(.-tagName %) (nodes-between child stop-node))))
 
+(defn tags-between-inclusive [child stop-node]
+  (reverse (map #(.-tagName %) (nodes-between-inclusive child stop-node))))
+
 (defn next-siblings [element]
   (drop 1 (take-while some? (iterate #(.-nextSibling %) element))))
 
@@ -102,3 +104,26 @@
 (defn delete-single-character [[node position]]
   (.deleteData node position 1)
   (remove-empty-nodes node))
+
+(defn- reparent-next-siblings [search-node old-parent new-parent]
+  (doseq [sibling (vec (all-siblings-after old-parent search-node))]
+    (reparent new-parent sibling)))
+
+(defn- move-next-siblings [new-parent node-hierarchy]
+  (dorun (map (partial reparent-next-siblings (first node-hierarchy))
+    node-hierarchy
+    (node-path new-parent))))
+
+(defn split-tree-with-tags [node-to-split [text-node position] tags-between]
+  (let [new-text-node (.splitText text-node position)
+        deepest-child (insert-tree-after node-to-split tags-between)]
+    (move-next-siblings deepest-child (nodes-between-inclusive text-node node-to-split))
+    (remove-empty-nodes text-node)
+    new-text-node))
+
+(defn split-tree [node-to-split [text-node position]]
+  (split-tree-with-tags
+    node-to-split
+    [text-node position]
+    (tags-between-inclusive text-node node-to-split)))
+
