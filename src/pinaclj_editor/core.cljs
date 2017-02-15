@@ -60,9 +60,10 @@
     (pdom/remove-empty-nodes new-text-node)
     (pdom/insert-tree-after insert-point (concat tag-names [""]))))
 
-; todo - this needs to place the caret right where it already was
 (defn- close-existing-tag [[node _ :as caret] existing]
-  (pdom/split-tree-with-tags existing caret (pdom/tags-between node existing)))
+  (let [tags-between (pdom/tags-between-inclusive node existing)
+        new-tag (pdom/split-tree-with-tags existing caret tags-between)]
+    (pdom/insert-tree-after existing (drop 1 tags-between))))
 
 (def default-structural-nodes ["P" ""])
 
