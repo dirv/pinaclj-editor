@@ -1,7 +1,5 @@
 (ns pinaclj-editor.core
   (:require [clojure.browser.repl :as repl]
-            [goog.dom :as dom]
-            [goog.events :as events]
             [pinaclj-editor.dom :as pdom]
             [pinaclj-editor.caret :as caret]
             [pinaclj-editor.text-node-navigator :as text]
@@ -11,16 +9,16 @@
 (enable-console-print!)
 
 (def modifier-mappings
-  {[(.-B KeyCodes) :meta] [dom/TagName.STRONG]
-   [(.-I KeyCodes) :meta] [dom/TagName.EM]
-   [(.-C KeyCodes) :meta] [dom/TagName.CITE]
-   [(.-ONE KeyCodes) :shift :meta] [dom/TagName.H1]
-   [(.-TWO KeyCodes) :shift :meta] [dom/TagName.H2]
-   [(.-THREE KeyCodes) :shift :meta] [dom/TagName.H3]
-   [(.-FOUR KeyCodes) :shift :meta] [dom/TagName.H4]
-   [(.-FIVE KeyCodes) :shift :meta] [dom/TagName.H5]
-   [(.-SIX KeyCodes) :shift :meta] [dom/TagName.H6]
-   [(.-O KeyCodes) :meta] [dom/TagName.OL dom/TagName.LI]
+  {[(.-B KeyCodes) :meta] [:STRONG]
+   [(.-I KeyCodes) :meta] [:EM]
+   [(.-C KeyCodes) :meta] [:CITE]
+   [(.-ONE KeyCodes) :shift :meta] [:H1]
+   [(.-TWO KeyCodes) :shift :meta] [:H2]
+   [(.-THREE KeyCodes) :shift :meta] [:H3]
+   [(.-FOUR KeyCodes) :shift :meta] [:H4]
+   [(.-FIVE KeyCodes) :shift :meta] [:H5]
+   [(.-SIX KeyCodes) :shift :meta] [:H6]
+   [(.-O KeyCodes) :meta] [:OL :LI]
    })
 
 (def selection-mappings
@@ -65,7 +63,7 @@
         new-tag (pdom/split-tree-with-tags existing caret tags-between)]
     (pdom/insert-tree-after existing (drop 1 tags-between))))
 
-(def default-structural-nodes ["P" ""])
+(def default-structural-nodes [:P ""])
 
 (defn- close-list [list-element li-element re-tags]
   (pdom/remove-node li-element)
@@ -84,8 +82,8 @@
         text-node (nth caret 2)
         breaker (validity/find-breaking-element text-node)]
     (cond
-      (= dom/TagName.OL (.-tagName breaker))
-      (let [li-element (pdom/find-tag text-node dom/TagName.LI)]
+      (= :OL (pdom/tag breaker))
+      (let [li-element (pdom/find-tag text-node :LI)]
         (if (pdom/node-empty? text-node)
           (close-list breaker li-element (pdom/tags-between text-node li-element))
           (break-at-enter breaker caret)))
@@ -192,8 +190,8 @@
 
 (defn- edit [root]
   (caret/do-update (partial initialize-document root))
-  (events/listen (dom/getDocument) "keydown" (partial handle-keydown root))
-  (events/listen (dom/getDocument) "keypress" (partial handle-keypress root))
-  (events/listen (dom/getDocument) "mouseup" (partial handle-mouseup root)))
+  (.addEventListener js/document "keydown" (partial handle-keydown root))
+  (.addEventListener js/document "keypress" (partial handle-keypress root))
+  (.addEventListener js/document "mouseup" (partial handle-mouseup root)))
 
-(edit (dom/getElement "editor"))
+(edit (.getElementById js/document "editor"))

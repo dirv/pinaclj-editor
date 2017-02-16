@@ -1,9 +1,9 @@
 (ns pinaclj-editor.dom)
 
-(def structural-elements #{"BLOCKQUOTE" "DATA" "DATALIST" "DFN" "FIGURE" "H1" "H2" "H3" "H4" "H5" "H6" "OL" "P" "PRE" "UL"})
+(def structural-elements #{:BLOCKQUOTE :DATA :DATALIST :DFN :FIGURE :H1 :H2 :H3 :H4 :H5 :H6 :OL :P :PRE :UL})
 
 (def parent-element #(.-parentElement %))
-(def tag #(when % (.-tagName %)))
+(def tag #(when % (keyword (.-tagName %))))
 (def node-type #(when % (.-nodeType %)))
 
 (defn is-one-of? [node elements]
@@ -12,7 +12,7 @@
 (defmulti create-element identity)
 (defmethod create-element "" [_] (.createTextNode js/document ""))
 (defmethod create-element nil [_] (.createTextNode js/document ""))
-(defmethod create-element :default [tag] (.createElement js/document tag))
+(defmethod create-element :default [tag] (.createElement js/document (name tag)))
 
 (defn- remove-node [node]
   (.removeChild (.-parentElement node) node))
@@ -71,7 +71,7 @@
     deepest-child))
 
 (defn find-tag [node tag]
-  (some #(when (= (.-tagName %) tag) %) (node-path node)))
+  (some #(when (= (tag %) tag) %) (node-path node)))
 
 (defn nodes-between [child stop-node]
   (take-while (partial not= stop-node) (node-path child)))
@@ -80,10 +80,10 @@
   (concat (nodes-between child stop-node) (list stop-node)))
 
 (defn tags-between [child stop-node]
-  (reverse (map #(.-tagName %) (nodes-between child stop-node))))
+  (reverse (map tag (nodes-between child stop-node))))
 
 (defn tags-between-inclusive [child stop-node]
-  (reverse (map #(.-tagName %) (nodes-between-inclusive child stop-node))))
+  (reverse (map tag (nodes-between-inclusive child stop-node))))
 
 (defn next-siblings [element]
   (drop 1 (take-while some? (iterate #(.-nextSibling %) element))))
@@ -95,7 +95,7 @@
   (next-siblings (child-containing-node parent search-node)))
 
 (defn structural-parent [node]
-  (some #(when (structural-elements (.-tagName %)) %) (node-path node)))
+  (some #(when (structural-elements (tag %)) %) (node-path node)))
 
 (defn merge-nodes [first-node second-node]
   (doall (map (partial reparent first-node) (vec (children second-node))))
