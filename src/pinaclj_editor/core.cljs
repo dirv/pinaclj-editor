@@ -2,41 +2,12 @@
   (:require [clojure.browser.repl :as repl]
             [pinaclj-editor.dom :as pdom]
             [pinaclj-editor.caret :as caret]
+            [pinaclj-editor.command-bindings :as bindings]
+            [pinaclj-editor.key-codes :as key-codes]
             [pinaclj-editor.text-node-navigator :as text]
-            [pinaclj-editor.validity :as validity])
-  (:import [goog.events KeyCodes]))
+            [pinaclj-editor.validity :as validity]))
 
 (enable-console-print!)
-
-(def modifier-mappings
-  {[(.-B KeyCodes) :meta] [:STRONG]
-   [(.-I KeyCodes) :meta] [:EM]
-   [(.-C KeyCodes) :meta] [:CITE]
-   [(.-ONE KeyCodes) :shift :meta] [:H1]
-   [(.-TWO KeyCodes) :shift :meta] [:H2]
-   [(.-THREE KeyCodes) :shift :meta] [:H3]
-   [(.-FOUR KeyCodes) :shift :meta] [:H4]
-   [(.-FIVE KeyCodes) :shift :meta] [:H5]
-   [(.-SIX KeyCodes) :shift :meta] [:H6]
-   [(.-O KeyCodes) :meta] [:OL :LI]
-   })
-
-(def selection-mappings
-  {[(.-LEFT KeyCodes) :shift] :character-left
-   [(.-RIGHT KeyCodes) :shift] :character-right
-   [(.-LEFT KeyCodes) :alt :shift] :word-left
-   [(.-RIGHT KeyCodes) :alt :shift] :word-right
-   [(.-LEFT KeyCodes) :shift :meta] :line-left
-   [(.-RIGHT KeyCodes) :shift :meta] :line-right})
-
-(def movement-mappings
-  {[(.-LEFT KeyCodes)] :move-character-left
-   [(.-RIGHT KeyCodes)] :move-character-right
-   [(.-LEFT KeyCodes) :alt] :move-word-left
-   [(.-RIGHT KeyCodes) :alt] :move-word-right
-   [(.-LEFT KeyCodes) :meta] :move-line-left
-   [(.-RIGHT KeyCodes) :meta] :move-line-right
-   })
 
 (defn- move-caret [root [start-container start-offset end-container end-offset] movement-type]
   (caret/keep-within
@@ -140,16 +111,16 @@
 (defn- perform-action [root [c & modifiers :as key-desc] caret]
   (println "Handling key combo" key-desc)
   (cond
-    (= c (.-BACKSPACE KeyCodes))
+    (= c :backspace)
     (insert-backspace root caret)
-    (= c (.-ENTER KeyCodes))
+    (= c :enter)
     (handle-enter caret)
-    (and (contains? movement-mappings key-desc))
-    (move-caret root caret (get movement-mappings key-desc))
-    (and (contains? selection-mappings key-desc))
-    (extend-range caret (get selection-mappings key-desc))
-    (and (contains? modifier-mappings key-desc))
-    (decorate-nodes (get modifier-mappings key-desc) caret)))
+    (and (contains? bindings/movement-mappings key-desc))
+    (move-caret root caret (get bindings/movement-mappings key-desc))
+    (and (contains? bindings/selection-mappings key-desc))
+    (extend-range caret (get bindings/selection-mappings key-desc))
+    (and (contains? bindings/modifier-mappings key-desc))
+    (decorate-nodes (get bindings/modifier-mappings key-desc) caret)))
 
 (defn- ->char [[c & modifiers]]
   (let [ch (char c)]
@@ -163,21 +134,12 @@
     (let [caret (caret/delete-range)]
       (insert-character caret (->char key-desc)))))
 
-(defn- modifier-map [e]
-  {:alt (.-altKey e)
-   :ctrl (.-ctrlKey e)
-   :shift (.-shiftKey e)
-   :meta (.-metaKey e)})
-
-(defn- modifiers-of [e]
-  (mapv first (filter second (modifier-map e))))
-
 (defn- handle-keypress [root e]
-  (when (caret/do-update (partial print-character (cons (.-charCode e) (modifiers-of e))))
+  (when (caret/do-update (partial print-character (cons (.-charCode e) (key-codes/modifiers-of e))))
     (.preventDefault e)))
 
 (defn- handle-keydown [root e]
-  (when (caret/do-update (partial perform-action root (cons (.-keyCode e) (modifiers-of e))))
+  (when (caret/do-update (partial perform-action root (cons (key-codes/key-code e) (key-codes/modifiers-of e))))
     (.preventDefault e)))
 
 (defn- handle-mouseup [root e]
