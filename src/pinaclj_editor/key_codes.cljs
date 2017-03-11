@@ -26,3 +26,14 @@
 (defn- modifiers-of [key-event]
   (mapv first (filter second (modifier-map key-event))))
 
+(defn from-keydown [e]
+  (cons (key-code e) (modifiers-of e)))
+
+(defn from-keypress [e]
+  (cons (.-charCode e) (modifiers-of e)))
+
+(defn ->char [[c & modifiers]]
+  (let [ch (char c)]
+    (if (some #{:shift} modifiers)
+      ch
+      (.toLowerCase ch))))

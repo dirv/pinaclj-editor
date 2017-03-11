@@ -1,5 +1,7 @@
 (ns pinaclj-editor.core
   (:require [clojure.browser.repl :as repl]
+            [pinaclj-editor.core2 :as core2]
+            [pinaclj-editor.render :as render]
             [pinaclj-editor.dom :as pdom]
             [pinaclj-editor.caret :as caret]
             [pinaclj-editor.command-bindings :as bindings]
@@ -122,24 +124,17 @@
     (and (contains? bindings/modifier-mappings key-desc))
     (decorate-nodes (get bindings/modifier-mappings key-desc) caret)))
 
-(defn- ->char [[c & modifiers]]
-  (let [ch (char c)]
-    (if (some #{:shift} modifiers)
-      ch
-      (.toLowerCase ch))))
-
 (defn- print-character [[c & modifiers :as key-desc] _]
-  (println "Printing character " key-desc)
   (when-not (some #{:meta :alt} modifiers)
     (let [caret (caret/delete-range)]
-      (insert-character caret (->char key-desc)))))
+      (insert-character caret (key-codes/->char key-desc)))))
 
 (defn- handle-keypress [root e]
-  (when (caret/do-update (partial print-character (cons (.-charCode e) (key-codes/modifiers-of e))))
+  (when (caret/do-update (partial print-character (key-codes/from-keypress e)))
     (.preventDefault e)))
 
 (defn- handle-keydown [root e]
-  (when (caret/do-update (partial perform-action root (cons (key-codes/key-code e) (key-codes/modifiers-of e))))
+  (when (caret/do-update (partial perform-action root (key-codes/from-keydown e)))
     (.preventDefault e)))
 
 (defn- handle-mouseup [root e]
@@ -156,4 +151,5 @@
   (.addEventListener js/document "keypress" (partial handle-keypress root))
   (.addEventListener js/document "mouseup" (partial handle-mouseup root)))
 
-(edit (.getElementById js/document "editor"))
+;(edit (.getElementById js/document "editor"))
+(core2/edit (.getElementById js/document "editor"))
