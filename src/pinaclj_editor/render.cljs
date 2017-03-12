@@ -19,7 +19,7 @@
   (apply idom/void tag nil [] attrs))
 
 (defmethod render :parent-element
-  [[tag & [attrs-or-first-child remaining-children :as all-children]]]
+  [[tag & [attrs-or-first-child & remaining-children :as all-children]]]
   (if (map? attrs-or-first-child)
     (do (open-element tag nil attrs-or-first-child)
         (doall (map render remaining-children)))

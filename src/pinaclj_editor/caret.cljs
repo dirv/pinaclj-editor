@@ -8,7 +8,7 @@
   (.addRange sel rng)
   rng)
 
-(defn- get-range []
+(defn get-range []
   (let [sel (.getSelection js/window)]
     (if (zero? (.-rangeCount sel))
       (-> (create-range) (add-range sel))
