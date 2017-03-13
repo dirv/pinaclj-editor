@@ -13,3 +13,6 @@
 
 (def ->zip
   (partial zip/zipper vector? children make-node))
+
+(defn- root-loc [z]
+  (last (take-while #(not (nil? %)) (iterate zip/up z))))
